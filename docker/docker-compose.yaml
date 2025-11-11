@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  apcc:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: apcc:dev
+    container_name: apcc_dev
+    working_dir: /workspace
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabiliaties: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES: all
+      - PYTHONPATH=/workspace
+      - DATA_ROOT=/data
+
+    volumes:
+      - ..:/workspace:cached
+      - ${HOST_DATA_ROOT:-$HOME/datasets}:/data:ro
+      - apcc_outputs:/workspace/outputs
+      - apcc_cache:/root/.cache
+
+    tty: true
+    user: ${UID:-1000}:${GID:-1000}
+
+volumes:
+  apcc_outputs:
+  apcc_cache:
