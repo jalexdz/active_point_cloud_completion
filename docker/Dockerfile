@@ -13,4 +13,9 @@ RUN pip install -e .
 
 ENV PYTHONPATH=/workspace DATA_ROOT=/data
 
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+RUN groupadd -g ${GROUP_ID} appuser && useradd -m -u ${USER_ID} -g ${GROUP_ID} appuser
+USER appuser 
+
 CMD ["/bin/bash"]
