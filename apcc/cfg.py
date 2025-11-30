@@ -25,6 +25,7 @@ class DataCfg:
     num_points_complete: int = 16384
     normalize: bool = True # unit volume
     views_per_object: int = 26
+    num_queries: int = 512
 
 @dataclass
 class TrainCfg:
