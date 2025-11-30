@@ -1,0 +1,43 @@
+exp_name: apcc_mvp_seq_baseline
+seed: 123
+
+model:
+  # PointNet global feature size 
+  enc_feat_dim: 256
+
+  # GRU belief state
+  gru_hidden_dim: 512
+  gru_layers: 1
+  gru_dropout: 0.0
+
+  # MLP decoder 
+  dec_mlp_hidden_dim: 128
+  dec_num_layers: 3
+
+
+data:
+  root: ./data               # folder containing MVP_Train_CP.h5 / MVP_Test_CP.h5
+  split: train               
+  num_views: 4               # T: sequence length per object
+  views_per_object: 26       # MVP-specific
+  num_queries: 512           # Nq: number of query points per object
+  normalize: false           
+
+train:
+  batch_size: 8
+  num_workers: 4
+
+  epochs: 30
+
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  device: cuda      
+  amp: false        
+  grad_clip_norm: null
+
+logging:
+  logdir: ./runs/apcc
+  ckpt_dir: ./checkpoints
+  ckpt_every: 5
+  print_every: 10
+  save_last: true
