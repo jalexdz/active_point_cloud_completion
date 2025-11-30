@@ -24,7 +24,7 @@ class DataCfg:
     num_points_partial: int = 2048
     num_points_complete: int = 16384
     normalize: bool = True # unit volume
-    view_per_object: int = 26
+    views_per_object: int = 26
 
 @dataclass
 class TrainCfg:

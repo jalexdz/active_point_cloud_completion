@@ -10,7 +10,8 @@ class MVPSequenceDataset(data.Dataset):
                  num_views=4, 
                  random_order=True,
                  data_root="./data/",
-                 views_per_object=26):
+                 views_per_object=26
+        ):
         super().__init__()
 
         if prefix=="train":
