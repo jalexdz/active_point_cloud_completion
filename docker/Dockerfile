@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /workspace
 COPY pyproject.toml README.md LICENSE ./
-RUN pip install -e .
+RUN pip install -e . h5py
 
 ENV PYTHONPATH=/workspace DATA_ROOT=/data
 
