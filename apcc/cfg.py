@@ -10,11 +10,8 @@ class ModelCfg:
     gru_hidden_dim: int = 512
     gru_layers: int = 1
     gru_dropout: float = 0.0
-    token_dim: int = 512
-    num_tokens: int = 196
-    dec_depth: int = 8
-    dec_heads: int = 16
-    mlp_ratio: float = 4.0
+    dec_mlp_hidden_dim: int = 512
+    dec_num_layers: int = 3
 
 @dataclass
 class DataCfg:
