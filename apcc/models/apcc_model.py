@@ -12,7 +12,6 @@ class APCCModel(nn.Module):
         enc_feat_dim = cfg.enc_feat_dim
         gru_hidden_dim = cfg.gru_hidden_dim
         num_layers = cfg.gru_layers
-        token_dim = cfg.token_dim
 
         # PointNet encoder
         self.encoder = PointNet(
