@@ -45,15 +45,25 @@ class MVPSequenceDataset(data.Dataset):
         start = index * self.views_per_object
         end = start + self.views_per_object
 
-        object_views = self.partials[start : end]
+        object_views = self.partials[start:end]     # [26, N, 3]
+        complete = self.gt_data[index]              # [N_gt, 3]
 
         if self.random_order:
             idxs = np.random.choice(self.views_per_object, self.num_views, replace=False)
         else:
             idxs = np.arange(self.num_views)
 
-        seq_partials = torch.from_numpy(object_views[idxs]).float()
-        complete = torch.from_numpy(self.gt_data[index]).float()
+        seq_partials = object_views[idxs]           # [T, N, 3]
+
+        # Normalize
+        center = complete.mean(axis=0, keepdims=True)
+        scale = np.max(np.linalg.norm(complete - center, axis=1))
+
+        complete = (complete - center) / (scale + 1e-9)
+        seq_partials = (seq_partials - center) / (scale + 1e-9)
+
+        seq_partials = torch.from_numpy(seq_partials).float()
+        complete = torch.from_numpy(complete).float()
         label = torch.tensor(self.labels[index]).long()
-       
-        return label, seq_partials, complete
+
+        return label, seq_partials, complete, center, scale

@@ -77,7 +77,7 @@ def train_one_epoch(model: torch.nn.Module,
     for batch_idx, batch in enumerate(dataloader):
         # unpack batch from dataset
         # expected: label, seq_partials, gt_complete
-        labels, seq_partials, gt_complete = batch
+        labels, seq_partials, gt_complete, center, scale = batch
         # seq_partials: [B, T, N, 3]
         # gt_complete:  [B, N_gt, 3]
 

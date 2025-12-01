@@ -21,7 +21,6 @@ def main():
         prefix=cfg.data.split,           
         num_views=cfg.data.num_views,    
         data_root=cfg.data.root,
-        normalize=getattr(cfg.data, "normalize", False),
         views_per_object=cfg.data.views_per_object,
     )
 
