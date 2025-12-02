@@ -16,7 +16,7 @@ model:
 
 
 data:
-  root: ./data               # folder containing MVP_Train_CP.h5 / MVP_Test_CP.h5
+  root: /data               # folder containing MVP_Train_CP.h5 / MVP_Test_CP.h5
   split: train               
   num_views: 4               # T: sequence length per object
   views_per_object: 26       # MVP-specific
@@ -36,8 +36,8 @@ train:
   grad_clip_norm: null
 
 logging:
-  logdir: ./runs/apcc
-  ckpt_dir: ./checkpoints
+  logdir: /workspace/outputs/logs
+  ckpt_dir: /workspace/outputs/checkpoints
   ckpt_every: 5
   print_every: 10
   save_last: true

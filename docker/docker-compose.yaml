@@ -8,6 +8,8 @@ services:
     image: apcc:dev
     container_name: apcc_dev
     working_dir: /workspace
+    ports: 
+      - "6006:6006"
 
     deploy:
       resources:
@@ -23,13 +25,11 @@ services:
     volumes:
       - ..:/workspace:cached
       - ${HOST_DATA_ROOT:-$HOME/datasets}:/data:ro
-      - apcc_outputs:/workspace/outputs
       - apcc_cache:/root/.cache
+      
 
     tty: true
-    user: ${UID:-1000}:${GID:-1000}
+    user: root #${UID:-1000}:${GID:-1000}
 
 volumes:
-  apcc_outputs:
   apcc_cache:
-

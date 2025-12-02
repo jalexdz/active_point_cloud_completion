@@ -4,12 +4,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git build-essential nano ca-certificates curl pkg-config \
+    git build-essential nano ca-certificates curl pkg-config tmux \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 COPY pyproject.toml README.md LICENSE ./
-RUN pip install -e . h5py
+RUN pip install -e . h5py tensorboard
 
 ENV PYTHONPATH=/workspace DATA_ROOT=/data
 
