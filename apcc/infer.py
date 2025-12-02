@@ -121,7 +121,7 @@ def run_sequence_inference(cfg_path: str,
 
     # --- Load model + checkpoint ---
     model = APCCModel(cfg.model).to(device)
-    ckpt = torch.load(ckpt_path, map_location=device)
+    ckpt = torch.load(ckpt_path, map_location=device, weights_only=True)
     model.load_state_dict(ckpt["model_state"])
     model.eval()
 
