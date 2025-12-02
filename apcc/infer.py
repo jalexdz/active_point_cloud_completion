@@ -136,6 +136,19 @@ def run_sequence_inference(cfg_path: str,
     # pick the views we want: view_indices is a list like [0, 5, 10, 15]
     partials_seq = partials_norm[view_indices]  # [T, N, 3]
 
+        # --- Save the chosen input partials (denormalized) for visualization ---
+    for i, v_idx in enumerate(view_indices):
+        partial_norm = partials_seq[i]                    # [N, 3], normalized
+        partial_world = partial_norm * scale + center     # [N, 3], numpy
+
+        in_path = os.path.join(
+            out_dir, f"object_{object_idx}_input_view{v_idx}.pcd"
+        )
+        write_pcd(partial_world, in_path)
+        print(f"Saved input partial for view {v_idx} to {in_path} "
+              f"({partial_world.shape[0]} points)")
+
+
     # convert to torch
     partials_seq_t = torch.from_numpy(partials_seq).to(device)     # [T, N, 3]
     complete_t = torch.from_numpy(complete_norm).unsqueeze(0).to(device)  # [1, N_gt, 3]
