@@ -8,20 +8,28 @@ from apcc.cfg import load_cfg
 from apcc.models.apcc_model import APCCModel
 
 
-def write_ply(points: np.ndarray, path: str):
+def write_pcd(points: np.ndarray, path: str):
     """
-    points: [N, 3], numpy
+    Write points [N, 3] to an ASCII PCD file.
     """
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    out_dir = os.path.dirname(path)
+    if out_dir != "":
+        os.makedirs(out_dir, exist_ok=True)
+
     N = points.shape[0]
+
     with open(path, "w") as f:
-        f.write("ply\n")
-        f.write("format ascii 1.0\n")
-        f.write(f"element vertex {N}\n")
-        f.write("property float x\n")
-        f.write("property float y\n")
-        f.write("property float z\n")
-        f.write("end_header\n")
+        f.write("# .PCD v0.7 - Point Cloud Data file format\n")
+        f.write("VERSION 0.7\n")
+        f.write("FIELDS x y z\n")
+        f.write("SIZE 4 4 4\n")
+        f.write("TYPE F F F\n")
+        f.write("COUNT 1 1 1\n")
+        f.write(f"WIDTH {N}\n")
+        f.write("HEIGHT 1\n")
+        f.write("VIEWPOINT 0 0 0 1 0 0 0\n")
+        f.write(f"POINTS {N}\n")
+        f.write("DATA ascii\n")
         for p in points:
             f.write(f"{p[0]} {p[1]} {p[2]}\n")
 
@@ -136,8 +144,8 @@ def run_sequence_inference(cfg_path: str,
     query_xyz = make_query_grid(complete_t, res=grid_res, padding=0.1)  # [1, M, 3]
 
     # --- Save GT once (denormalized) ---
-    gt_world = complete_norm * scale + center  # still numpy
-    write_ply(gt_world, os.path.join(out_dir, f"object_{object_idx}_gt.ply"))
+    gt_world = complete_norm * scale + center  # numpy [N_gt, 3]
+    write_pcd(gt_world, os.path.join(out_dir, f"object_{object_idx}_gt.pcd"))
 
     # --- Roll through sequence ---
     h_prev = None
@@ -158,9 +166,9 @@ def run_sequence_inference(cfg_path: str,
             pred_points_world = pred_points_norm_np * scale + center  # [K, 3]
 
             out_path = os.path.join(
-                out_dir, f"object_{object_idx}_t{t}_views_{len(view_indices)}.ply"
+                out_dir, f"object_{object_idx}_t{t}_views_{len(view_indices)}.pcd"
             )
-            write_ply(pred_points_world, out_path)
+            write_pcd(pred_points_world, out_path)
             print(f"Saved timestep {t} prediction to {out_path} "
                   f"({pred_points_world.shape[0]} points)")
 
@@ -168,6 +176,7 @@ def run_sequence_inference(cfg_path: str,
 def parse_view_indices(s: str):
     # e.g. "0,5,10,15" -> [0, 5, 10, 15]
     return [int(x) for x in s.split(",") if x.strip() != ""]
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
