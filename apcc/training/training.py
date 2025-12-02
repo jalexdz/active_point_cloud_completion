@@ -137,9 +137,59 @@ def train_one_epoch(model: torch.nn.Module,
     print(f"Epoch {epoch} done. Avg loss: {epoch_loss:.4f}")
     return epoch_loss
 
+def validate_one_epoch(model: torch.nn.Module,
+                       dataloader: DataLoader,
+                       device: torch.device,
+                       epoch: int,
+                       writer: Optional[SummaryWriter] = None,
+                       num_queries: int = 512):
+    model.eval()
+    criterion = nn.BCEWithLogitsLoss()
+
+    running_loss = 0.0
+    num_batches = len(dataloader)
+
+    with torch.no_grad():
+        for batch_idx, batch in enumerate(dataloader):
+            labels, seq_partials, gt_complete, center, scale = batch
+            seq_partials = seq_partials.to(device).float()
+            gt_complete = gt_complete.to(device).float()
+
+            B, T, N, _ = seq_partials.shape
+
+            query_xyz, gt_occ = sample_queries_and_occupancy(
+                gt_complete, num_queries=num_queries
+            )
+            query_xyz = query_xyz.to(device)
+            gt_occ = gt_occ.to(device)
+
+            h_prev = None
+            total_loss = 0.0
+
+            for t in range(T):
+                pc_t = seq_partials[:, t, :, :]  # [B, N, 3]
+                occ_logits, h_prev = model(pc_t, query_xyz, h_prev)
+
+                loss_t = criterion(
+                    occ_logits.view(B, -1),
+                    gt_occ.view(B, -1),
+                )
+                total_loss += loss_t
+
+            total_loss = total_loss / T
+            running_loss += total_loss.item()
+
+    epoch_loss = running_loss / num_batches
+    if writer is not None:
+        writer.add_scalar("val/epoch_loss", epoch_loss, epoch)
+
+    print(f"[Val] Epoch {epoch} avg loss: {epoch_loss:.4f}")
+    return epoch_loss
+
 
 def train_model(model: torch.nn.Module,
                 train_dataset,
+                val_dataset,
                 cfg,
                 device: torch.device):
     train_loader = create_dataloader(
@@ -147,6 +197,13 @@ def train_model(model: torch.nn.Module,
         batch_size=cfg.train.batch_size,
         num_workers=cfg.train.num_workers,
         shuffle=True,
+    )
+
+    val_loader = create_dataloader(
+        val_dataset,
+        batch_size=cfg.train.batch_size,
+        num_workers=cfg.train.num_workers,
+        shuffle=False,
     )
 
     model.to(device)
@@ -158,10 +215,10 @@ def train_model(model: torch.nn.Module,
 
     writer = SummaryWriter(log_dir=cfg.logging.logdir)
 
-    best_loss = float("inf")
+    best_val_loss = float("inf")
 
     for epoch in range(cfg.train.epochs):
-        epoch_loss = train_one_epoch(
+        train_loss = train_one_epoch(
             model,
             train_loader,
             optimizer,
@@ -172,9 +229,18 @@ def train_model(model: torch.nn.Module,
             num_queries=cfg.data.num_queries if hasattr(cfg.data, "num_queries") else 512,
         )
 
-        # optional: save best
-        if epoch_loss < best_loss and cfg.logging.save_last:
-            best_loss = epoch_loss
+        val_loss = validate_one_epoch(
+            model,
+            val_loader,
+            device,
+            epoch,
+            writer,
+            num_queries=cfg.data.num_queries if hasattr(cfg.data, "num_queries") else 512,
+        )
+
+        # save best on validation
+        if val_loss < best_val_loss and cfg.logging.save_last:
+            best_val_loss = val_loss
             ckpt_path = f"{cfg.logging.ckpt_dir}/best.pth"
             print(f"Saving new best model to {ckpt_path}")
             torch.save(
@@ -182,7 +248,8 @@ def train_model(model: torch.nn.Module,
                     "epoch": epoch,
                     "model_state": model.state_dict(),
                     "optimizer_state": optimizer.state_dict(),
-                    "loss": epoch_loss,
+                    "train_loss": train_loss,
+                    "val_loss": val_loss,
                 },
                 ckpt_path,
             )

@@ -24,11 +24,17 @@ def main():
         views_per_object=cfg.data.views_per_object,
     )
 
+    val_dataset = MVPSequenceDataset(
+        prefix="val",
+        num_views=cfg.data.num_views,
+        data_root=cfg.data.root,
+        views_per_object=cfg.data.views_per_object,
+    )
     # model
     model = APCCModel(cfg.model)
 
     # train
-    train_model(model, train_dataset, cfg, device)
+    train_model(model, train_dataset, val_dataset, cfg, device)
 
 
 if __name__ == "__main__":
