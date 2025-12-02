@@ -1,5 +1,3 @@
-name: apcc
-
 services:
   apcc:
     build:
@@ -8,7 +6,7 @@ services:
     image: apcc:dev
     container_name: apcc_dev
     working_dir: /workspace
-    ports: 
+    ports:
       - "6006:6006"
 
     deploy:
@@ -17,19 +15,26 @@ services:
           devices:
             - capabilities: [gpu]
 
+    network_mode: "host"
+
     environment:
       NVIDIA_VISIBLE_DEVICES: "all"
       PYTHONPATH: /workspace
       DATA_ROOT: /data
+      DISPLAY: ${DISPLAY}
+      QT_X11_NO_MITSHM: 1
+      XAUTHORITY: /root/.Xauthority
 
     volumes:
-      - ..:/workspace:cached
+      - ../..:/workspace:cached
       - ${HOST_DATA_ROOT:-$HOME/datasets}:/data:ro
       - apcc_cache:/root/.cache
-      
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw      # optional but fine
+      - ${HOME}/.Xauthority:/root/.Xauthority:ro  # <-- add this line
 
     tty: true
     user: root #${UID:-1000}:${GID:-1000}
 
 volumes:
   apcc_cache:
+
