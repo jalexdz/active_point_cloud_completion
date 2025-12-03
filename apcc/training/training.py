@@ -105,11 +105,19 @@ def train_one_epoch(model: torch.nn.Module,
             occ_logits, h_prev = model(pc_t, query_xyz, h_prev)  # [B, Nq, 1]
 
             # BCE expects [B, Nq] or [B*Nq]; we can flatten
-            loss_t = criterion(
-                occ_logits.view(B, -1),
-                gt_occ.view(B, -1),
-            )
-            total_loss += loss_t
+            visible_mask = compute_visibility_mask(seq_partials[:, t, :, :], query_xyz)  # [B, Nq]
+
+            # Flatten logits and targets
+            logits_flat = occ_logits.view(B, -1)
+            gt_flat = gt_occ.view(B, -1)
+
+            # If no visible queries, skip this timestep (avoid NaNs)
+            if visible_mask.any():
+                loss_t = criterion(
+                    logits_flat[visible_mask],
+                    gt_flat[visible_mask],
+                )
+                total_loss += loss_t    
 
         # full-sequence supervision: average over timesteps
         total_loss = total_loss / T
@@ -136,6 +144,40 @@ def train_one_epoch(model: torch.nn.Module,
 
     print(f"Epoch {epoch} done. Avg loss: {epoch_loss:.4f}")
     return epoch_loss
+
+def compute_visibility_mask(pc_t: torch.Tensor,
+                            query_xyz: torch.Tensor,
+                            radius: float = 0.03) -> torch.Tensor:
+    """
+    pc_t:      [B, N, 3]   partial cloud at timestep t (normalized coords)
+    query_xyz: [B, Nq, 3]  query points for occupancy
+
+    Returns:
+      visible_mask: [B, Nq] boolean
+        visible_mask[b, j] = True if query j is within 'radius'
+        of *any* point in pc_t[b].
+    """
+    # Ensure shapes
+    assert pc_t.dim() == 3 and query_xyz.dim() == 3
+    B, N, _ = pc_t.shape
+    _, Nq, _ = query_xyz.shape
+
+    # Expand to pairwise distances
+    # pc_exp: [B, N, 1, 3]
+    # q_exp:  [B, 1, Nq, 3]
+    pc_exp = pc_t.unsqueeze(2)
+    q_exp = query_xyz.unsqueeze(1)
+
+    # [B, N, Nq]
+    diff = pc_exp - q_exp
+    dist2 = (diff ** 2).sum(dim=-1)
+
+    # For each query, get distance to closest partial point
+    # min_dist2: [B, Nq]
+    min_dist2, _ = dist2.min(dim=1)
+
+    visible_mask = (min_dist2 <= radius ** 2)  # [B, Nq] bool
+    return visible_mask
 
 def validate_one_epoch(model: torch.nn.Module,
                        dataloader: DataLoader,
@@ -170,11 +212,19 @@ def validate_one_epoch(model: torch.nn.Module,
                 pc_t = seq_partials[:, t, :, :]  # [B, N, 3]
                 occ_logits, h_prev = model(pc_t, query_xyz, h_prev)
 
-                loss_t = criterion(
-                    occ_logits.view(B, -1),
-                    gt_occ.view(B, -1),
-                )
-                total_loss += loss_t
+                visible_mask = compute_visibility_mask(seq_partials[:, t, :, :], query_xyz)  # [B, Nq]
+
+                # Flatten logits and targets
+                logits_flat = occ_logits.view(B, -1)
+                gt_flat = gt_occ.view(B, -1)
+
+                # If no visible queries, skip this timestep (avoid NaNs)
+                if visible_mask.any():
+                    loss_t = criterion(
+                        logits_flat[visible_mask],
+                        gt_flat[visible_mask],
+                    )
+                    total_loss += loss_t        
 
             total_loss = total_loss / T
             running_loss += total_loss.item()
