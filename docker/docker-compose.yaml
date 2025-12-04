@@ -19,7 +19,7 @@ services:
 
     environment:
       NVIDIA_VISIBLE_DEVICES: "all"
-      PYTHONPATH: /workspace
+      PYTHONPATH: /workspace/active_point_cloud_completion:/workspace
       DATA_ROOT: /data
       DISPLAY: ${DISPLAY}
       QT_X11_NO_MITSHM: 1
