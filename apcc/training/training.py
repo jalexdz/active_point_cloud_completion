@@ -112,12 +112,16 @@ def train_one_epoch(model: torch.nn.Module,
             gt_flat = gt_occ.view(B, -1)
 
             # If no visible queries, skip this timestep (avoid NaNs)
-            if visible_mask.any():
-                loss_t = criterion(
-                    logits_flat[visible_mask],
-                    gt_flat[visible_mask],
-                )
-                total_loss += loss_t    
+            # if visible_mask.any():
+            #     loss_t = criterion(
+            #         logits_flat[visible_mask],
+            #         gt_flat[visible_mask],
+            #     )
+            loss_t = criterion(
+                logits_flat,
+                gt_flat,
+            )
+            total_loss += loss_t    
 
         # full-sequence supervision: average over timesteps
         total_loss = total_loss / T
@@ -219,12 +223,18 @@ def validate_one_epoch(model: torch.nn.Module,
                 gt_flat = gt_occ.view(B, -1)
 
                 # If no visible queries, skip this timestep (avoid NaNs)
-                if visible_mask.any():
-                    loss_t = criterion(
-                        logits_flat[visible_mask],
-                        gt_flat[visible_mask],
-                    )
-                    total_loss += loss_t        
+                # if visible_mask.any():
+                #     loss_t = criterion(
+                #         logits_flat[visible_mask],
+                #         gt_flat[visible_mask],
+                #     )
+                
+                loss_t = criterion(
+                    logits_flat,
+                    gt_flat,
+                )  
+                total_loss += loss_t   
+   
 
             total_loss = total_loss / T
             running_loss += total_loss.item()
