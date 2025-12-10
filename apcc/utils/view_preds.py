@@ -5,10 +5,6 @@ import matplotlib.pyplot as plt
 
 
 def load_pcd_xyz(path: str) -> np.ndarray:
-    """
-    Minimal ASCII PCD reader that returns Nx3 xyz.
-    Assumes 'DATA ascii' and x y z as first 3 fields.
-    """
     pts = []
     with open(path, "r") as f:
         data_section = False
@@ -31,10 +27,6 @@ def load_pcd_xyz(path: str) -> np.ndarray:
 
 
 def set_axes_equal(ax, pts_list):
-    """
-    Make 3D axes equal so shapes look consistent across subplots.
-    pts_list: list of [N,3] arrays
-    """
     all_pts = np.concatenate(
         [p for p in pts_list if p is not None and p.shape[0] > 0], axis=0
     )
@@ -55,24 +47,11 @@ def set_axes_equal(ax, pts_list):
 
 
 def plot_object_grid(out_dir: str, object_idx: int, view_indices):
-    """
-    Build a 2 x (T+1) grid:
-      row 0: input partials for each view, last col = GT
-      row 1: predictions for each timestep, last col = GT
-    Saves PNG in out_dir.
-
-    Assumes naming from infer.py:
-      object_{idx}_input_view{v}.pcd
-      object_{idx}_t{t}_views_{len(view_indices)}.pcd
-      object_{idx}_gt.pcd
-    """
     T = len(view_indices)
     cols = T + 1
 
-    # Collect all point clouds to compute global bounds
     all_pts = []
 
-    # Inputs and predictions
     inputs = []
     preds = []
 
@@ -123,7 +102,6 @@ def plot_object_grid(out_dir: str, object_idx: int, view_indices):
             row_axes.append(ax)
         axs.append(row_axes)
 
-    # Plot inputs (top row) and preds (bottom row)
     for t, v in enumerate(view_indices):
         in_pts = inputs[t]
         pred_pts = preds[t]
@@ -139,19 +117,15 @@ def plot_object_grid(out_dir: str, object_idx: int, view_indices):
         ax_in.set_title(f"View {v}", fontsize=8)
         ax_pred.set_title(f"Pred t={t}", fontsize=8)
 
-    # Last column: GT only once (bottom-right)
     ax_gt_top = axs[0][cols - 1]
     ax_gt_bot = axs[1][cols - 1]
 
-    # keep top empty / blank
     ax_gt_top.set_axis_off()
 
-    # bottom: GT complete
     if gt_pts.shape[0] > 0:
         ax_gt_bot.scatter(gt_pts[:, 0], gt_pts[:, 1], gt_pts[:, 2], s=1)
     ax_gt_bot.set_title("GT complete", fontsize=8)
 
-    # Equal axis scaling per subplot using global bounds
     for row in range(2):
         for col in range(cols):
             set_axes_equal(axs[row][col], all_pts)
