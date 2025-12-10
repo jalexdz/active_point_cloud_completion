@@ -3,6 +3,7 @@ import argparse
 import h5py
 import numpy as np
 import torch
+import matplotlib.pyplot as plt
 
 from apcc.cfg import load_cfg
 from apcc.models.apcc_model import APCCModel
@@ -32,6 +33,25 @@ def write_pcd(points: np.ndarray, path: str):
         f.write("DATA ascii\n")
         for p in points:
             f.write(f"{p[0]} {p[1]} {p[2]}\n")
+
+
+def chamfer_distance(x: torch.Tensor, y: torch.Tensor) -> float:
+    """
+    Simple (symmetric) Chamfer distance between two point clouds x, y.
+    x: [Nx, 3], y: [Ny, 3]
+    Returns scalar float.
+    """
+    if x.numel() == 0 or y.numel() == 0:
+        return float("nan")
+
+    # [Nx, Ny, 3]
+    diff = x.unsqueeze(1) - y.unsqueeze(0)
+    dist2 = (diff ** 2).sum(dim=-1)  # [Nx, Ny]
+
+    min_x, _ = dist2.min(dim=1)  # [Nx]
+    min_y, _ = dist2.min(dim=0)  # [Ny]
+
+    return (min_x.mean() + min_y.mean()).item()
 
 
 def occupancy_from_complete(gt_complete: torch.Tensor,
@@ -160,8 +180,8 @@ def run_sequence_inference(cfg_path: str,
       - input partials (denormalized) as PCD
       - GT complete as PCD
       - per-timestep predictions as PCD
-    Prints:
-      - per-timestep occupancy accuracy on the query grid.
+    Returns:
+      dict of per-timestep metrics (acc, prec, rec, f1, iou, cd)
     """
     device = torch.device(device_str if torch.cuda.is_available() else "cpu")
     cfg = load_cfg(cfg_path)
@@ -204,6 +224,8 @@ def run_sequence_inference(cfg_path: str,
 
     # --- GT occupancy on the same grid for accuracy metrics ---
     gt_occ_grid = occupancy_from_complete(complete_t, query_xyz)  # [1, M, 1]
+    gt_occ_flat = gt_occ_grid.view(-1)                            # [M]
+    gt_occ_bool = gt_occ_flat > 0.5
 
     # --- Save GT once (denormalized) ---
     gt_world = complete_norm * scale + center  # numpy [N_gt, 3]
@@ -217,6 +239,13 @@ def run_sequence_inference(cfg_path: str,
     T = partials_seq_t.shape[0]
     B = 1
 
+    acc_list = []
+    prec_list = []
+    rec_list = []
+    f1_list = []
+    iou_list = []
+    chamfer_list = []
+
     with torch.no_grad():
         for t in range(T):
             pc_t = partials_seq_t[t].unsqueeze(0)  # [1, N, 3]
@@ -224,16 +253,55 @@ def run_sequence_inference(cfg_path: str,
             occ_logits, h_prev = model(pc_t, query_xyz, h_prev)  # [1, M, 1]
             probs = torch.sigmoid(occ_logits)                    # [1, M, 1]
 
-            # ---- Accuracy vs GT occupancy on the grid ----
             preds = (probs > occ_thresh).float()                 # [1, M, 1]
-            acc_t = (preds == gt_occ_grid).float().mean().item()
-            print(f"[object {object_idx}] t = {t}, grid occupancy accuracy = {acc_t:.4f}")
+            preds_flat = preds.view(-1)                          # [M]
+            preds_bool = preds_flat > 0.5
 
-            # ---- Extract predicted occupied points for visualization ----
-            occ_probs = probs.view(B, -1)                        # [1, M]
+            # ---- confusion counts ----
+            tp = ((preds_bool == 1) & (gt_occ_bool == 1)).sum().item()
+            tn = ((preds_bool == 0) & (gt_occ_bool == 0)).sum().item()
+            fp = ((preds_bool == 1) & (gt_occ_bool == 0)).sum().item()
+            fn = ((preds_bool == 0) & (gt_occ_bool == 1)).sum().item()
+
+            total = tp + tn + fp + fn
+            acc_t = (tp + tn) / total if total > 0 else 0.0
+
+            prec_t = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            rec_t  = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            if prec_t + rec_t > 0:
+                f1_t = 2 * prec_t * rec_t / (prec_t + rec_t)
+            else:
+                f1_t = 0.0
+
+            denom_iou = tp + fp + fn
+            iou_t = tp / denom_iou if denom_iou > 0 else 0.0
+
+            acc_list.append(acc_t)
+            prec_list.append(prec_t)
+            rec_list.append(rec_t)
+            f1_list.append(f1_t)
+            iou_list.append(iou_t)
+
+            # ---- Chamfer distance vs GT complete cloud ----
+            occ_probs = probs.view(B, -1)             # [1, M]
             mask = occ_probs[0] > occ_thresh
-            pred_points_norm = query_xyz[0][mask]                # [K, 3]
+            pred_points_norm = query_xyz[0][mask]     # [K, 3]
 
+            gt_points_norm = complete_t[0]            # [N_gt, 3]
+
+            cd_t = chamfer_distance(
+                pred_points_norm,
+                gt_points_norm
+            )
+            chamfer_list.append(cd_t)
+
+            print(
+                f"[object {object_idx}] t = {t}, "
+                f"acc={acc_t:.4f}, prec={prec_t:.4f}, rec={rec_t:.4f}, "
+                f"f1={f1_t:.4f}, IoU={iou_t:.4f}, CD={cd_t:.6f}"
+            )
+
+            # ---- Save predicted occupied points (world coords) ----
             pred_points_norm_np = pred_points_norm.cpu().numpy()
             pred_points_world = pred_points_norm_np * scale + center  # [K, 3]
 
@@ -243,6 +311,17 @@ def run_sequence_inference(cfg_path: str,
             write_pcd(pred_points_world, out_path)
             print(f"Saved timestep {t} prediction to {out_path} "
                   f"({pred_points_world.shape[0]} points)")
+
+    # return metrics for this object
+    return {
+        "acc": np.array(acc_list),
+        "prec": np.array(prec_list),
+        "rec": np.array(rec_list),
+        "f1": np.array(f1_list),
+        "iou": np.array(iou_list),
+        "cd": np.array(chamfer_list),
+        "T": T,
+    }
 
 
 def parse_view_indices(s: str):
@@ -276,17 +355,22 @@ if __name__ == "__main__":
         default="0,5,10,15",
         help="Comma-separated view indices from [0..25]"
     )
-    parser.add_argument("--out_dir", type=str, default="outputs/infer_vis")
+    parser.add_argument("--out_dir", type=str, default="outputs/infer_vis_wo_gru")
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--grid_res", type=int, default=32)
     parser.add_argument("--occ_thresh", type=float, default=0.5)
 
     args = parser.parse_args()
     view_indices = parse_view_indices(args.views)
+    os.makedirs(args.out_dir, exist_ok=True)
 
-    for obj_idx in range(args.object_idx, args.object_idx + args.num_objects):
+    metric_sums = None
+    num_objects = args.num_objects
+    all_metrics = []
+
+    for obj_idx in range(args.object_idx, args.object_idx + num_objects):
         print(f"\n=== Running inference for object {obj_idx} ===")
-        run_sequence_inference(
+        metrics = run_sequence_inference(
             cfg_path=args.cfg,
             ckpt_path=args.ckpt,
             data_root=args.data_root,
@@ -298,3 +382,65 @@ if __name__ == "__main__":
             grid_res=args.grid_res,
             occ_thresh=args.occ_thresh,
         )
+        all_metrics.append(metrics)
+
+        if metric_sums is None:
+            metric_sums = {
+                k: metrics[k].copy()
+                for k in ["acc", "prec", "rec", "f1", "iou", "cd"]
+            }
+        else:
+            for k in metric_sums.keys():
+                metric_sums[k] += metrics[k]
+
+    # average over objects
+    avg_metrics = {k: v / num_objects for k, v in metric_sums.items()}
+
+    # save for later plotting / comparison (e.g. GRU vs no-GRU)
+    np.savez(
+        os.path.join(args.out_dir, "metrics_seq.npz"),
+        view_indices=np.array(view_indices, dtype=np.int32),
+        avg_acc=avg_metrics["acc"],
+        avg_prec=avg_metrics["prec"],
+        avg_rec=avg_metrics["rec"],
+        avg_f1=avg_metrics["f1"],
+        avg_iou=avg_metrics["iou"],
+        avg_cd=avg_metrics["cd"],
+    )
+
+    print("\n=== Average metrics over objects ===")
+    for t, v in enumerate(view_indices):
+        print(
+            f"t={t} (view {v}): "
+            f"acc={avg_metrics['acc'][t]:.4f}, "
+            f"f1={avg_metrics['f1'][t]:.4f}, "
+            f"IoU={avg_metrics['iou'][t]:.4f}, "
+            f"CD={avg_metrics['cd'][t]:.6f}"
+        )
+
+    # --- Quick plots of how metrics evolve with views ---
+    steps = np.arange(len(view_indices))
+
+    plt.figure()
+    plt.plot(steps, avg_metrics["acc"], label="Accuracy")
+    plt.plot(steps, avg_metrics["f1"],  label="F1")
+    plt.plot(steps, avg_metrics["iou"], label="IoU")
+    plt.xlabel("Timestep index")
+    plt.ylabel("Score")
+    plt.xticks(steps, view_indices)
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(args.out_dir, "metrics_curve.png"), dpi=200)
+
+    plt.figure()
+    plt.plot(steps, avg_metrics["cd"], label="Chamfer")
+    plt.xlabel("Timestep index")
+    plt.ylabel("Chamfer distance")
+    plt.xticks(steps, view_indices)
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(args.out_dir, "chamfer_curve.png"), dpi=200)
+
+    print(f"\nSaved metrics curves to {args.out_dir}")
