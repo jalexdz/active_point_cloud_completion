@@ -6,9 +6,9 @@ import torch.nn.functional as F
 # PCN: Point Completion Network
 
 class PointNet(nn.Module):
-    def __init__(self, latent_dim=1024):
+    def __init__(self, num_global_feats=1024):
         super().__init__()
-        self.latent_dim = latent_dim
+        self.num_global_feats = num_global_feats
 
         self.first_conv = nn.Sequential(
             nn.Conv1d(3, 128, 1),
@@ -23,8 +23,8 @@ class PointNet(nn.Module):
             nn.Conv1d(512, 512, 1),
             nn.BatchNorm1d(512),
             nn.ReLU(inplace=True),
-            nn.Conv1d(512, latent_dim, 1),
-            nn.BatchNorm1d(latent_dim),
+            nn.Conv1d(512, self.num_global_feats, 1),
+            nn.BatchNorm1d(self.num_global_feats),
             nn.ReLU(inplace=True),
         )
 
