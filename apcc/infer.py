@@ -10,9 +10,6 @@ from apcc.models.apcc_model import APCCModel
 
 
 def write_pcd(points: np.ndarray, path: str):
-    """
-    Write points [N, 3] to an ASCII PCD file.
-    """
     out_dir = os.path.dirname(path)
     if out_dir != "":
         os.makedirs(out_dir, exist_ok=True)
@@ -36,11 +33,6 @@ def write_pcd(points: np.ndarray, path: str):
 
 
 def chamfer_distance(x: torch.Tensor, y: torch.Tensor) -> float:
-    """
-    Simple (symmetric) Chamfer distance between two point clouds x, y.
-    x: [Nx, 3], y: [Ny, 3]
-    Returns scalar float.
-    """
     if x.numel() == 0 or y.numel() == 0:
         return float("nan")
 
@@ -57,17 +49,6 @@ def chamfer_distance(x: torch.Tensor, y: torch.Tensor) -> float:
 def occupancy_from_complete(gt_complete: torch.Tensor,
                             query_xyz: torch.Tensor,
                             radius: float = 0.03) -> torch.Tensor:
-    """
-    Compute GT occupancy for query points given GT complete surface.
-
-    Args:
-      gt_complete: [1, N_gt, 3]
-      query_xyz:   [1, Nq, 3]
-      radius:      threshold distance to consider 'occupied'
-
-    Returns:
-      occ_gt: [1, Nq, 1] (1 if query is near GT surface, else 0)
-    """
     B, N_gt, _ = gt_complete.shape
     _, Nq, _ = query_xyz.shape
     assert B == 1, "This helper is written for batch size 1."
@@ -84,17 +65,6 @@ def occupancy_from_complete(gt_complete: torch.Tensor,
 
 
 def make_query_grid(gt_complete: torch.Tensor, res: int = 32, padding: float = 0.1):
-    """
-    Build a regular 3D grid of query points around the GT complete object.
-
-    Args:
-      gt_complete: [1, N, 3] (normalized)
-      res:         number of steps per axis
-      padding:     padding factor around the GT bounding box
-
-    Returns:
-      query_xyz: [1, M, 3] with M = res^3
-    """
     xyz_min = gt_complete.min(dim=1, keepdim=True).values  # [1, 1, 3]
     xyz_max = gt_complete.max(dim=1, keepdim=True).values  # [1, 1, 3]
 
@@ -113,13 +83,6 @@ def make_query_grid(gt_complete: torch.Tensor, res: int = 32, padding: float = 0
 
 
 def load_mvp_object(data_root: str, split: str, object_idx: int):
-    """
-    Loads all 26 partial views and the GT complete for a single object from MVP.
-
-    Returns:
-      partials: [26, N, 3] (numpy)
-      complete: [N_gt, 3] (numpy)
-    """
     if split == "train":
         filename = "MVP_Train_CP.h5"
     elif split == "val":
@@ -145,15 +108,6 @@ def load_mvp_object(data_root: str, split: str, object_idx: int):
 
 
 def normalize_object(partials: np.ndarray, complete: np.ndarray):
-    """
-    Normalize object coordinates using the GT complete cloud.
-
-    Returns:
-      partials_norm: [T, N, 3]
-      complete_norm: [N_gt, 3]
-      center: [3]
-      scale: scalar
-    """
     center = complete.mean(axis=0, keepdims=True)             # [1, 3]
     dists = np.linalg.norm(complete - center, axis=1)
     scale = np.max(dists) + 1e-9
@@ -174,15 +128,6 @@ def run_sequence_inference(cfg_path: str,
                            device_str: str = "cuda",
                            grid_res: int = 32,
                            occ_thresh: float = 0.5):
-    """
-    Run sequential inference for a single object over a specified set of view indices.
-    Saves:
-      - input partials (denormalized) as PCD
-      - GT complete as PCD
-      - per-timestep predictions as PCD
-    Returns:
-      dict of per-timestep metrics (acc, prec, rec, f1, iou, cd)
-    """
     device = torch.device(device_str if torch.cuda.is_available() else "cpu")
     cfg = load_cfg(cfg_path)
 

@@ -15,30 +15,26 @@ def sample_queries_and_occupancy(gt_complete: torch.Tensor,
     device = gt_complete.device
     B, N_gt, _ = gt_complete.shape
 
-    # --- 1) Positive samples: points from the GT surface ---
     num_pos = num_queries // 2
     num_neg = num_queries - num_pos
 
-    idx = torch.randint(0, N_gt, (B, num_pos), device=device)  # [B, num_pos]
-    pos_xyz = gt_complete[torch.arange(B).unsqueeze(-1), idx]  # [B, num_pos, 3]
+    idx = torch.randint(0, N_gt, (B, num_pos), device=device)  
+    pos_xyz = gt_complete[torch.arange(B).unsqueeze(-1), idx]  
 
-    # --- 2) Negative samples: random points in bounding box around GT ---
-    xyz_min = gt_complete.min(dim=1, keepdim=True).values  # [B, 1, 3]
-    xyz_max = gt_complete.max(dim=1, keepdim=True).values  # [B, 1, 3]
+    xyz_min = gt_complete.min(dim=1, keepdim=True).values 
+    xyz_max = gt_complete.max(dim=1, keepdim=True).values  
 
-    # expand box slightly
     padding = 0.1 * (xyz_max - xyz_min + 1e-6)
     xyz_min = xyz_min - padding
     xyz_max = xyz_max + padding
 
     neg_xyz = torch.rand(B, num_neg, 3, device=device) * (xyz_max - xyz_min) + xyz_min
 
-    # naive assumption: random box samples are mostly empty
     pos_occ = torch.ones(B, num_pos, 1, device=device)
     neg_occ = torch.zeros(B, num_neg, 1, device=device)
 
-    query_xyz = torch.cat([pos_xyz, neg_xyz], dim=1)   # [B, num_queries, 3]
-    gt_occ = torch.cat([pos_occ, neg_occ], dim=1)      # [B, num_queries, 1]
+    query_xyz = torch.cat([pos_xyz, neg_xyz], dim=1)   
+    gt_occ = torch.cat([pos_occ, neg_occ], dim=1)
 
     return query_xyz, gt_occ
 
@@ -75,18 +71,13 @@ def train_one_epoch(model: torch.nn.Module,
     global_step_base = epoch * num_batches
 
     for batch_idx, batch in enumerate(dataloader):
-        # unpack batch from dataset
-        # expected: label, seq_partials, gt_complete
         labels, seq_partials, gt_complete, center, scale = batch
-        # seq_partials: [B, T, N, 3]
-        # gt_complete:  [B, N_gt, 3]
 
         seq_partials = seq_partials.to(device).float()
         gt_complete = gt_complete.to(device).float()
 
         B, T, N, _ = seq_partials.shape
 
-        # sample fixed queries per batch (same for all timesteps)
         query_xyz, gt_occ = sample_queries_and_occupancy(
             gt_complete, num_queries=num_queries
         )
@@ -95,35 +86,23 @@ def train_one_epoch(model: torch.nn.Module,
 
         optimizer.zero_grad()
 
-        # roll through the sequence
         h_prev = None
         total_loss = 0.0
 
         for t in range(T):
-            pc_t = seq_partials[:, t, :, :]  # [B, N, 3]
+            pc_t = seq_partials[:, t, :, :]  
 
-            occ_logits, h_prev = model(pc_t, query_xyz, h_prev)  # [B, Nq, 1]
+            occ_logits, h_prev = model(pc_t, query_xyz, h_prev)  
 
-            # BCE expects [B, Nq] or [B*Nq]; we can flatten
-            visible_mask = compute_visibility_mask(seq_partials[:, t, :, :], query_xyz)  # [B, Nq]
-
-            # Flatten logits and targets
             logits_flat = occ_logits.view(B, -1)
             gt_flat = gt_occ.view(B, -1)
 
-            # If no visible queries, skip this timestep (avoid NaNs)
-            # if visible_mask.any():
-            #     loss_t = criterion(
-            #         logits_flat[visible_mask],
-            #         gt_flat[visible_mask],
-            #     )
             loss_t = criterion(
                 logits_flat,
                 gt_flat,
             )
             total_loss += loss_t    
 
-        # full-sequence supervision: average over timesteps
         total_loss = total_loss / T
         total_loss.backward()
         optimizer.step()
@@ -148,40 +127,6 @@ def train_one_epoch(model: torch.nn.Module,
 
     print(f"Epoch {epoch} done. Avg loss: {epoch_loss:.4f}")
     return epoch_loss
-
-def compute_visibility_mask(pc_t: torch.Tensor,
-                            query_xyz: torch.Tensor,
-                            radius: float = 0.03) -> torch.Tensor:
-    """
-    pc_t:      [B, N, 3]   partial cloud at timestep t (normalized coords)
-    query_xyz: [B, Nq, 3]  query points for occupancy
-
-    Returns:
-      visible_mask: [B, Nq] boolean
-        visible_mask[b, j] = True if query j is within 'radius'
-        of *any* point in pc_t[b].
-    """
-    # Ensure shapes
-    assert pc_t.dim() == 3 and query_xyz.dim() == 3
-    B, N, _ = pc_t.shape
-    _, Nq, _ = query_xyz.shape
-
-    # Expand to pairwise distances
-    # pc_exp: [B, N, 1, 3]
-    # q_exp:  [B, 1, Nq, 3]
-    pc_exp = pc_t.unsqueeze(2)
-    q_exp = query_xyz.unsqueeze(1)
-
-    # [B, N, Nq]
-    diff = pc_exp - q_exp
-    dist2 = (diff ** 2).sum(dim=-1)
-
-    # For each query, get distance to closest partial point
-    # min_dist2: [B, Nq]
-    min_dist2, _ = dist2.min(dim=1)
-
-    visible_mask = (min_dist2 <= radius ** 2)  # [B, Nq] bool
-    return visible_mask
 
 def validate_one_epoch(model: torch.nn.Module,
                        dataloader: DataLoader,
@@ -216,18 +161,8 @@ def validate_one_epoch(model: torch.nn.Module,
                 pc_t = seq_partials[:, t, :, :]  # [B, N, 3]
                 occ_logits, h_prev = model(pc_t, query_xyz, h_prev)
 
-                visible_mask = compute_visibility_mask(seq_partials[:, t, :, :], query_xyz)  # [B, Nq]
-
-                # Flatten logits and targets
                 logits_flat = occ_logits.view(B, -1)
                 gt_flat = gt_occ.view(B, -1)
-
-                # If no visible queries, skip this timestep (avoid NaNs)
-                # if visible_mask.any():
-                #     loss_t = criterion(
-                #         logits_flat[visible_mask],
-                #         gt_flat[visible_mask],
-                #     )
                 
                 loss_t = criterion(
                     logits_flat,
