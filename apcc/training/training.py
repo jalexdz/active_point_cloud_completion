@@ -103,7 +103,6 @@ def train_one_epoch(model: torch.nn.Module,
             )
             total_loss += loss_t    
 
-        total_loss = total_loss / T
         total_loss.backward()
         optimizer.step()
 
@@ -170,8 +169,6 @@ def validate_one_epoch(model: torch.nn.Module,
                 )  
                 total_loss += loss_t   
    
-
-            total_loss = total_loss / T
             running_loss += total_loss.item()
 
     epoch_loss = running_loss / num_batches
