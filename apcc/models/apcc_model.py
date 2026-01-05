@@ -39,7 +39,8 @@ class APCCModel(nn.Module):
         e_t = self.encoder(pointcloud_t)  # (B, enc_feat_dim)
 
         # Update GRU
-        h_t, hn = self.gru(e_t, h_prev)  # (B, H), (num_layers, B, H)
+        h_t = e_t
+        hn = h_prev
 
         # Decode to get occupancy predictions
         occ_logits = self.decoder(h_t, query_xyz)  # (B, num_query, 1)
