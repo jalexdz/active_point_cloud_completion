@@ -29,8 +29,8 @@ services:
       - ../..:/workspace:cached
       - ${HOST_DATA_ROOT:-$HOME/datasets}:/data:ro
       - apcc_cache:/root/.cache
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw      # optional but fine
-      - ${HOME}/.Xauthority:/root/.Xauthority:ro  # <-- add this line
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw     
+      - ${HOME}/.Xauthority:/root/.Xauthority:ro  
 
     tty: true
     user: root #${UID:-1000}:${GID:-1000}

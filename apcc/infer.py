@@ -127,7 +127,7 @@ def run_sequence_inference(cfg_path: str,
                            out_dir: str,
                            device_str: str = "cuda",
                            grid_res: int = 32,
-                           occ_thresh: float = 0.5):
+                           occ_thresh: float = 0.75):
     device = torch.device(device_str if torch.cuda.is_available() else "cpu")
     cfg = load_cfg(cfg_path)
 
