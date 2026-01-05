@@ -9,34 +9,43 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 
-def sample_queries_and_occupancy(gt_complete: torch.Tensor,
-                                 num_queries: int = 512):
-  
+def sample_queries_and_occupancy(
+    gt_complete: torch.Tensor,
+    num_queries: int = 2048,
+    radius: float = 0.02,
+    near_sigma: float = 0.01,
+    near_frac: float = 0.7,
+) -> tuple[torch.Tensor, torch.Tensor]:
     device = gt_complete.device
     B, N_gt, _ = gt_complete.shape
+    Nq = num_queries
 
-    num_pos = num_queries // 2
-    num_neg = num_queries - num_pos
-
-    idx = torch.randint(0, N_gt, (B, num_pos), device=device)  
-    pos_xyz = gt_complete[torch.arange(B).unsqueeze(-1), idx]  
-
-    xyz_min = gt_complete.min(dim=1, keepdim=True).values 
-    xyz_max = gt_complete.max(dim=1, keepdim=True).values  
-
+    xyz_min = gt_complete.min(dim=1, keepdim=True).values
+    xyz_max = gt_complete.max(dim=1, keepdim=True).values
     padding = 0.1 * (xyz_max - xyz_min + 1e-6)
     xyz_min = xyz_min - padding
     xyz_max = xyz_max + padding
 
-    neg_xyz = torch.rand(B, num_neg, 3, device=device) * (xyz_max - xyz_min) + xyz_min
+    N_near = int(Nq * near_frac)
+    N_far = Nq - N_near
 
-    pos_occ = torch.ones(B, num_pos, 1, device=device)
-    neg_occ = torch.zeros(B, num_neg, 1, device=device)
+    idx = torch.randint(0, N_gt, (B, N_near), device=device)
+    base = gt_complete[torch.arange(B, device=device).unsqueeze(-1), idx]  
+    noise = near_sigma * torch.randn(B, N_near, 3, device=device)
+    near_xyz = base + noise
 
-    query_xyz = torch.cat([pos_xyz, neg_xyz], dim=1)   
-    gt_occ = torch.cat([pos_occ, neg_occ], dim=1)
+    far_xyz = torch.rand(B, N_far, 3, device=device) * (xyz_max - xyz_min) + xyz_min
 
+    query_xyz = torch.cat([near_xyz, far_xyz], dim=1)  
+
+    pc = gt_complete.unsqueeze(2)        
+    q  = query_xyz.unsqueeze(1)          
+    dist2 = ((pc - q) ** 2).sum(dim=-1)  
+    min_dist2 = dist2.min(dim=1).values
+
+    gt_occ = (min_dist2 <= radius * radius).float().unsqueeze(-1)  
     return query_xyz, gt_occ
+
 
 
 def create_dataloader(dataset,

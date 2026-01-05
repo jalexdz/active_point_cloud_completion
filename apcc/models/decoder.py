@@ -41,4 +41,3 @@ class APCCDecoder(nn.Module):
 
         occ_logits = logits_flat.view(B, Nq, 1)
         return occ_logits
-    
