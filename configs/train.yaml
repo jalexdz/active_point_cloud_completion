@@ -27,7 +27,7 @@ train:
   batch_size: 8
   num_workers: 4
 
-  epochs: 200
+  epochs: 400
 
   lr: 1.0e-4
   weight_decay: 1.0e-4
@@ -36,8 +36,8 @@ train:
   grad_clip_norm: null
 
 logging:
-  logdir: /workspace/outputs/logs
-  ckpt_dir: /workspace/outputs/checkpoints
+  logdir: /workspace/active_point_cloud_completion/outputs/logs
+  ckpt_dir: /workspace/active_point_cloud_completion/outputs/checkpoints
   ckpt_every: 5
   print_every: 10
   save_last: true
